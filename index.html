@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>DayTracker</title>
+<meta name="description" content="Minimal offline calendar: tap a day to cycle it neutral, green, red." />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#4f46e5" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0b1120" media="(prefers-color-scheme: dark)" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="DayTracker" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<style>
+  :root {
+    --bg: #f1f5f9;
+    --panel: #ffffff;
+    --ink: #0f172a;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --brand: #4f46e5;
+    --green: #15803d;
+    --red: #b91c1c;
+    --radius: 14px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1120;
+      --panel: #151f36;
+      --ink: #e6edf7;
+      --muted: #93a2b8;
+      --line: #253352;
+      --brand: #a5b4fc;
+      --green: #22c55e;
+      --red: #f87171;
+    }
+
+    /* Bright marks need dark text to stay readable on a dark surface. */
+    .day.is-green,
+    .day.is-red { color: #0b1120; }
+
+    .day.is-today.is-green,
+    .day.is-today.is-red { box-shadow: inset 0 0 0 2px rgba(11, 17, 32, .55); }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .app {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 460px;
+    min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0 auto;
+    padding: calc(12px + env(safe-area-inset-top)) 12px calc(14px + env(safe-area-inset-bottom));
+  }
+
+  /* Header ------------------------------------------------------------- */
+  .bar {
+    display: grid;
+    grid-template-columns: 48px 1fr 48px;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: background-color .15s ease, transform .08s ease;
+  }
+
+  .title {
+    padding: 10px 4px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .nav:active, .title:active { transform: scale(.95); }
+
+  .nav:focus-visible, .title:focus-visible, .day:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+
+  /* Weekday labels ----------------------------------------------------- */
+  .weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    color: var(--muted);
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  /* Month grid --------------------------------------------------------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+
+  .cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    aspect-ratio: 1 / 1;
+    border-radius: var(--radius);
+  }
+
+  .is-blank {
+    border: 0;
+    background: transparent;
+  }
+
+  .day {
+    padding: 0;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    font: inherit;
+    font-size: .95rem;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: background-color .15s ease, border-color .15s ease,
+                color .15s ease, box-shadow .15s ease, transform .08s ease;
+  }
+
+  .day:active { transform: scale(.93); }
+
+  .day.is-green,
+  .day.is-red {
+    border-color: transparent;
+    color: #fff;
+    font-weight: 700;
+  }
+
+  .day.is-green { background: var(--green); }
+  .day.is-red { background: var(--red); }
+
+  .day.is-today {
+    box-shadow: inset 0 0 0 2px var(--brand);
+    font-weight: 700;
+  }
+
+  .day.is-today.is-green,
+  .day.is-today.is-red {
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .9);
+  }
+
+  /* Footer ------------------------------------------------------------- */
+  .hint {
+    margin: 0 4px;
+    color: var(--muted);
+    font-size: .75rem;
+    text-align: center;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>
+</head>
+<body>
+  <main class="app">
+    <header class="bar">
+      <button id="prev" class="nav" type="button" aria-label="Previous month">&#8249;</button>
+      <button id="title" class="title" type="button" aria-live="polite"></button>
+      <button id="next" class="nav" type="button" aria-label="Next month">&#8250;</button>
+    </header>
+
+    <div class="weekdays" aria-hidden="true">
+      <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+    </div>
+
+    <div id="grid" class="grid" aria-label="Month days"></div>
+
+    <p class="hint">Tap a day to cycle: clear &rarr; green &rarr; red</p>
+    <p id="status" class="sr-only" role="status" aria-live="polite"></p>
+  </main>
+
+<script>
+(function () {
+  'use strict';
+
+  var STORAGE_KEY = 'daytracker';
+  var KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+  var NEXT_STATUS = { neutral: 'green', green: 'red', red: 'neutral' };
+
+  var grid = document.getElementById('grid');
+  var titleEl = document.getElementById('title');
+  var statusEl = document.getElementById('status');
+
+  var marks = loadMarks();
+  var view = firstOfMonth(new Date());
+  var todayKey = keyOf(new Date());
+
+  /* Date helpers ------------------------------------------------------- */
+  function pad(value) {
+    return value < 10 ? '0' + value : String(value);
+  }
+
+  function keyOf(date) {
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate());
+  }
+
+  function dateFromKey(key) {
+    var parts = key.split('-');
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  }
+
+  function firstOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+  }
+
+  function monthLabel(date) {
+    return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  }
+
+  function dayLabel(key, status) {
+    var text = dateFromKey(key).toLocaleDateString(undefined, {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+    });
+    if (status === 'green') return text + ', green';
+    if (status === 'red') return text + ', red';
+    return text + ', no mark';
+  }
+
+  /* Storage ------------------------------------------------------------ */
+  function loadMarks() {
+    var result = {};
+    var raw = null;
+
+    try {
+      raw = localStorage.getItem(STORAGE_KEY);
+    } catch (error) {
+      return result;
+    }
+    if (!raw) return result;
+
+    try {
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return result;
+      Object.keys(parsed).forEach(function (key) {
+        var value = parsed[key];
+        if (KEY_PATTERN.test(key) && (value === 'green' || value === 'red')) {
+          result[key] = value;
+        }
+      });
+    } catch (error) {
+      /* Corrupted payload: start from a clean slate. */
+    }
+    return result;
+  }
+
+  function saveMarks() {
+    try {
+      if (Object.keys(marks).length === 0) {
+        localStorage.removeItem(STORAGE_KEY);
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(marks));
+      }
+    } catch (error) {
+      /* Storage unavailable or full: keep working from memory. */
+    }
+  }
+
+  /* Rendering ---------------------------------------------------------- */
+  function render() {
+    var year = view.getFullYear();
+    var month = view.getMonth();
+    var leading = new Date(year, month, 1).getDay();
+    var dayCount = new Date(year, month + 1, 0).getDate();
+    var label = monthLabel(view);
+    var fragment = document.createDocumentFragment();
+    var index;
+
+    titleEl.textContent = label;
+    titleEl.setAttribute('title', 'Jump to the current month');
+    titleEl.setAttribute('aria-label', 'Showing ' + label + '. Activate to jump to the current month.');
+
+    for (index = 0; index < leading; index += 1) {
+      var blank = document.createElement('div');
+      blank.className = 'cell is-blank';
+      fragment.appendChild(blank);
+    }
+
+    for (index = 1; index <= dayCount; index += 1) {
+      var key = keyOf(new Date(year, month, index));
+      var status = marks[key] || 'neutral';
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'cell day';
+      button.dataset.date = key;
+      button.dataset.status = status;
+      button.textContent = String(index);
+      if (key === todayKey) button.classList.add('is-today');
+      if (status === 'green') button.classList.add('is-green');
+      if (status === 'red') button.classList.add('is-red');
+      button.setAttribute('aria-label', dayLabel(key, status));
+      fragment.appendChild(button);
+    }
+
+    grid.replaceChildren(fragment);
+  }
+
+  function paint(button) {
+    var key = button.dataset.date;
+    var status = marks[key] || 'neutral';
+    button.dataset.status = status;
+    button.classList.toggle('is-green', status === 'green');
+    button.classList.toggle('is-red', status === 'red');
+    button.classList.toggle('is-today', key === todayKey);
+    button.setAttribute('aria-label', dayLabel(key, status));
+  }
+
+  /* Interaction -------------------------------------------------------- */
+  grid.addEventListener('click', function (event) {
+    var target = event.target;
+    if (!target || typeof target.closest !== 'function') return;
+
+    var button = target.closest('.day');
+    if (!button || !grid.contains(button)) return;
+
+    var key = button.dataset.date;
+    var current = marks[key] || 'neutral';
+    var next = NEXT_STATUS[current] || 'neutral';
+
+    if (next === 'neutral') {
+      delete marks[key];
+    } else {
+      marks[key] = next;
+    }
+
+    saveMarks();
+    paint(button);
+    statusEl.textContent = dayLabel(key, next);
+  });
+
+  document.getElementById('prev').addEventListener('click', function () {
+    view = new Date(view.getFullYear(), view.getMonth() - 1, 1);
+    render();
+  });
+
+  document.getElementById('next').addEventListener('click', function () {
+    view = new Date(view.getFullYear(), view.getMonth() + 1, 1);
+    render();
+  });
+
+  titleEl.addEventListener('click', function () {
+    view = firstOfMonth(new Date());
+    render();
+  });
+
+  /* Keep the "today" ring honest across midnight and across tabs. ------ */
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    var nowKey = keyOf(new Date());
+    if (nowKey === todayKey) return;
+    todayKey = nowKey;
+    render();
+  });
+
+  window.addEventListener('storage', function (event) {
+    if (event.key !== STORAGE_KEY && event.key !== null) return;
+    marks = loadMarks();
+    render();
+  });
+
+  render();
+
+  /* Offline support ---------------------------------------------------- */
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {
+        /* Registration is best-effort; the app still works online. */
+      });
+    });
+  }
+})();
+</script>
+</body>
+</html>
